@@ -1,0 +1,28 @@
+# My local ignores
+
+# backup and temp files
+*.bak
+
+# Editors
+.vscode/
+.idea/
+
+# byte-compiled
+__pycache__/
+*.py[cod
+*$py.class
+
+# build files
+build/
+dist/
+/Readme.pdf
+/Readme.html
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Data
+TestData/
+
+
