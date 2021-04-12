@@ -40,7 +40,7 @@ GPXAnAlzyer code.
 ## Installation
 *   Go to the GPXAnalyzer
     [latest release](https://github.com/dmcclimans/GPXAnalyzer/releases/latest)
-    page and download `GPXAnalyzer_x.y.zip` (where x.y is the version number).
+    page and download `GPXAnalyzer_x.y.z.zip` (where x.y.z is the version number).
 
 *   Run the installer program and follow the prompts.
 
