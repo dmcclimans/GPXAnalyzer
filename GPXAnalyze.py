@@ -452,6 +452,10 @@ def print_stats(gpx: gpxpy.gpx, args: argparse.Namespace, is_interactive: bool) 
         # if args.gpxpy_up_down or (args.ceg_threshold >= 0):
         if args.ceg_threshold >= 0:
             min_elevation, max_elevation = track.get_elevation_extremes()
+            if min_elevation is None:
+                min_elevation = 0.0
+            if max_elevation is None:
+                max_elevation = 0.0
             print(f'  Min: {meters_to_user_units_string(min_elevation, args.units)}'
                   f'  Max: {meters_to_user_units_string(max_elevation, args.units)}'
                   f'  Max-Min: {meters_to_user_units_string(max_elevation-min_elevation, args.units)}')
@@ -530,7 +534,7 @@ def read_csv_pressure_file(csv_filename: str, is_interactive: bool) -> Optional[
     Returns:
 
     """
-    # Read the Temp Disc file if one is specified
+    # Read the Sensor file if one is specified
     if not csv_filename:
         return None
 
@@ -538,7 +542,7 @@ def read_csv_pressure_file(csv_filename: str, is_interactive: bool) -> Optional[
         sensor_dfheading = pandas.read_csv(csv_filename, nrows=2)
         sensor_df = pandas.read_csv(csv_filename, skiprows=2, parse_dates=['date'])
     except (IOError, ValueError, Exception) as exc:
-        print(f'Cannot read temp disc file:\n    {csv_filename}\nError: {str(exc)}')
+        print(f'Cannot read sensor file:\n    {csv_filename}\nError: {str(exc)}')
         return None
 
     if sensor_df is None or sensor_df.empty or sensor_dfheading is None or sensor_dfheading.empty:
@@ -1158,7 +1162,7 @@ def replace_elevations_from_pressure(gpx: gpxpy.gpx, sensor_df: pandas.DataFrame
 
             # Look up the pressure and temperature for each point.
             # This may remove points if they are outside the barometer data.
-            # gpx_timestamps, gpx_elevations, gpx_pressures, and gpx_temperatures will all be the same size.
+            # gpx_timestamps, gpx_elevations, gpx_pressures, and gpx_temperatures will all be the same size (which could be zero).
             # gpx_timestamps and gpx_elevations could be smaller than before.
             gpx_timestamps, gpx_elevations, gpx_pressures, gpx_temperatures, = \
                 get_point_data(gpx_timestamps, gpx_elevations,
@@ -1175,18 +1179,23 @@ def replace_elevations_from_pressure(gpx: gpxpy.gpx, sensor_df: pandas.DataFrame
             if args.merge_temperature:
                 # Make sure there is a TrackPointExtension enabled, so we can insert temperatures if we have any.
                 if (gpx_temperatures is not None) \
+                        and (len(gpx_temperatures) > 0) \
                         and (gpxtpx_key not in gpx.nsmap):
                     gpx.nsmap[gpxtpx_key] = gpxtpx_extension
 
             # Store the results back into gpx
-            pressure_idx = 0
-            for idx, point in enumerate(segment.points):
-                if point.time.timestamp() >= gpx_timestamps[pressure_idx]:
-                    if args.merge_pressure:
-                        point.elevation = gpx_pressure_elevations[pressure_idx]
-                    if args.merge_temperature and gpx_temperatures is not None:
-                        add_replace_trackpoint_temperature(point, gpx_temperatures[idx])
-                    pressure_idx += 1
+            if (args.merge_pressure or args.merge_temperature) \
+                    and (len(gpx_timestamps) > 0):
+                pressure_idx = 0
+                for idx, point in enumerate(segment.points):
+                    if point.time.timestamp() >= gpx_timestamps[pressure_idx]:
+                        if args.merge_pressure and pressure_idx < len(gpx_pressure_elevations):
+                            point.elevation = gpx_pressure_elevations[pressure_idx]
+                        if args.merge_temperature \
+                                and gpx_temperatures is not None \
+                                and pressure_idx < len(gpx_temperatures):
+                            add_replace_trackpoint_temperature(point, gpx_temperatures[pressure_idx])
+                        pressure_idx += 1
 
 # I have broken elevation from sensor pressure.
 # Need to fix this.

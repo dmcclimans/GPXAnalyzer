@@ -97,13 +97,13 @@ def process_files(args: argparse.Namespace, is_interactive: bool):
     difference_gpx: gpxpy.gpx = None
     if difference_filename:
         try:
-            with open(difference_filename, 'r') as gpx_file:
+            with open(difference_filename, 'r', encoding='utf-8-sig') as gpx_file:
                 difference_gpx = gpxpy.parse(gpx_file)
         except (IOError, gpxpy.gpx.GPXException, gpxpy.gpx.GPXXMLSyntaxException, ValueError, Exception) as exc:
             print(f'Cannot read difference file:\n    {difference_filename}\nError: {str(exc)}')
             difference_gpx = None
 
-    # Read the Temp Disc file if one is specified
+    # Read the sensor file if one is specified
     sensor_df: Optional[pandas.DataFrame] = \
         GPXAnalyze.read_csv_pressure_file(args.sensor_file, is_interactive)
 
@@ -115,7 +115,7 @@ def process_files(args: argparse.Namespace, is_interactive: bool):
         # noinspection PyBroadException
         # gpxpy.geo.py and gpxpy.gpxfield.py raise various exceptions, including plain exceptions,
         try:
-            with open(input_filename, 'r') as gpx_file:
+            with open(input_filename, 'r', encoding='utf-8-sig') as gpx_file:
                 input_gpx = gpxpy.parse(gpx_file)
         except (IOError, gpxpy.gpx.GPXException, gpxpy.gpx.GPXXMLSyntaxException, ValueError, Exception) as exc:
             print(f'Cannot read file:\n    {input_filename}\nError: {str(exc)}')
