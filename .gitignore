@@ -3,6 +3,9 @@
 # backup and temp files
 *.bak
 
+# virtual environment
+venv/
+
 # Editors
 .vscode/
 .idea/
