@@ -42,6 +42,9 @@ def show_arguments(args: argparse.Namespace) -> None:
     print(f'Units: {args.units}')
     if (args.merge_temperature or args.merge_pressure) and args.sensor_file:
         print(f'Sensor file: {args.sensor_file}')
+        if args.adjust_sensor_time and args.adjust_sensor_time.strip():
+            delta: pandas.Timedelta = GPXAnalyze.time_str_to_datetime(args.adjust_sensor_time, True)
+            print(f'Adjust sensor time: {delta}')
         if args.merge_pressure:
             print(f'Substitute elevations from sensor file:')
             print(f'Sensor calibration method: {args.calibration_method}')
@@ -105,7 +108,9 @@ def process_files(args: argparse.Namespace, is_interactive: bool):
 
     # Read the sensor file if one is specified
     sensor_df: Optional[pandas.DataFrame] = \
-        GPXAnalyze.read_csv_pressure_file(args.sensor_file, is_interactive)
+        GPXAnalyze.read_csv_sensor_file(args.sensor_file, is_interactive)
+    if sensor_df is not None:
+        GPXAnalyze.adjust_sensor_time(sensor_df, args.adjust_sensor_time)
 
     for input_filename in filenames:
         if not (input_filename and input_filename.strip()):
@@ -178,6 +183,7 @@ def save_config(config, values: Dict, config_filename):
     settings['files'] = '' if values['files'] is None else values['files']
     settings['units'] = values['units']
     settings['sensor_file'] = values['sensor_file']
+    settings['adjust_sensor_time'] = values['adjust_sensor_time']
     settings['merge_pressure'] = 'True' if values['merge_pressure'] else 'False'
     settings['merge_temperature'] = 'True' if values['merge_temperature'] else 'False'
     settings['calibration_method'] = values['calibration_method']
@@ -210,6 +216,7 @@ def convert_settings_to_args(values: dict) -> argparse.Namespace:
     args.files = values['files'].split(';')
     args.units = values['units'].lower()
     args.sensor_file = values['sensor_file']
+    args.adjust_sensor_time = values['adjust_sensor_time']
     args.merge_pressure = values['merge_pressure']
     args.merge_temperature = values['merge_temperature']
     args.calibration_method = values['calibration_method']
@@ -249,6 +256,7 @@ def gui():
     default_files = settings.get('files', '')
     default_units: str = settings.get('units', 'Metric')
     default_sensor_file: str = settings.get('sensor_file')
+    default_adjust_sensor_time: str = settings.get('adjust_sensor_time')
     default_merge_pressure: bool = settings.getboolean('merge_pressure', fallback=False)
     default_merge_temperature: bool = settings.getboolean('merge_temperature', fallback=False)
     default_calibration_method: str = settings.get('calibration_method', 'C Linear fit in 1 hour sections')
@@ -278,8 +286,11 @@ def gui():
                sg.Combo(values=['English', 'Metric'], default_value=default_units, key='units',
                         readonly=True, size=(20, 0))],
               [sg.Text('Sensor file:'),
-               sg.Input(size=(76, 1), key='sensor_file', default_text=default_sensor_file),
+               sg.Input(size=(80, 1), key='sensor_file', default_text=default_sensor_file),
                sg.FileBrowse()],
+              [sg.Text('Adjust sensor times by:'),
+               sg.Input(size=(15, 1), key='adjust_sensor_time', default_text=default_adjust_sensor_time),
+               sg.Text('(dd D hh:mm:ss)')],
               [sg.Checkbox('Calculate elevation from sensor pressure', key='merge_pressure',
                            default=default_merge_pressure),
                sg.Text('Calibration method:'),
@@ -354,6 +365,8 @@ def parse_command_line() -> argparse.Namespace:
                         default='metric', help='Specify units')
     parser.add_argument('--sensor_file', default='',
                         help='Substitute elevations from Tempo disc file')
+    parser.add_argument('--adjust_sensor_time', default='0:00:00:00',
+                        help='Adjust sensor times (days:hh:mm:ss)')
     parser.add_argument('--merge_temperature', default=False, action='store_true',
                         help='Merge temperature from sensor file into gpx file')
     parser.add_argument('--merge_pressure', default=False, action='store_true',

@@ -9,13 +9,12 @@ import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import math
 import argparse
 import numpy as np
 import time
 from lxml import etree
-
 
 def meters_to_user_units_string(meters: float, units: str) -> str:
     """Convert a meters value to user units, and format as a string"""
@@ -521,7 +520,7 @@ def subtract_difference(gpx: gpxpy.gpx, difference_gpx: gpxpy.gpx, difference_fi
     # print(f'subtract_difference elapsed time {end - start}')
 
 
-def read_csv_pressure_file(csv_filename: str, is_interactive: bool) -> Optional[pandas.DataFrame]:
+def read_csv_sensor_file(csv_filename: str, is_interactive: bool) -> Optional[pandas.DataFrame]:
     """
     Read csv file with pressure data.
     Works with data files from tempo disc device.
@@ -1197,5 +1196,34 @@ def replace_elevations_from_pressure(gpx: gpxpy.gpx, sensor_df: pandas.DataFrame
                             add_replace_trackpoint_temperature(point, gpx_temperatures[pressure_idx])
                         pressure_idx += 1
 
-# I have broken elevation from sensor pressure.
-# Need to fix this.
+
+def time_str_to_datetime(adjust_sensor_time: str, display_error: bool) -> pandas.Timedelta:
+    try:
+        delta: pandas.Timedelta = pandas.Timedelta(adjust_sensor_time)
+    except (ValueError, Exception) as exc:
+        if display_error:
+            print(f'Cannot parse adjust sensor time: "{adjust_sensor_time}"\n  Error: {str(exc)}')
+        return timedelta(0)
+    if delta is None:
+        if display_error:
+            print(f'Cannot parse adjust sensor time: "{adjust_sensor_time}"')
+        return pandas.Timedelta(0)
+    return delta
+
+def adjust_sensor_time(sensor_df : Optional[pandas.DataFrame], adjust_sensor_time: Optional[str]) -> None:
+    td : timedelta = time_str_to_datetime('2:03:04', True)
+    td = time_str_to_datetime('1 00:00:00', True)
+    td = time_str_to_datetime('-3:04:05', True)
+    td = time_str_to_datetime('0:0:01.2', True)
+    td = time_str_to_datetime('2d04:13:02.266', True)
+
+    if not adjust_sensor_time or not adjust_sensor_time.strip():
+        return
+
+    delta : pandas.Timedelta = time_str_to_datetime(adjust_sensor_time, False)
+    if delta.total_seconds() == 0:
+        return
+
+    sensor_df['date'] += delta
+
+
