@@ -75,6 +75,9 @@ def show_arguments(args: argparse.Namespace) -> None:
         print(f'Plot difference file elevations')
     if args.plot_output:
         print(f'Plot output elevations')
+    if args.plot_temperature:
+        print(f'Plot temperatures (\u00b0{args.temperature_units})')
+
     # if args.gpxpy_up_down:
     #     print(f'Calculate gpxpy.get_uphill_downhill()')
     if args.ceg_threshold >= 0:
@@ -144,6 +147,8 @@ def process_files(args: argparse.Namespace, is_interactive: bool):
         GPXAnalyze.plot_elevations(input_gpx, input_filename, pre_difference_gpx, difference_gpx,
                                    output_gpx, args, is_interactive)
 
+        GPXAnalyze.plot_temperature(output_gpx, args, is_interactive)
+
         GPXAnalyze.print_stats(output_gpx, args, is_interactive)
 
 
@@ -197,6 +202,8 @@ def save_config(config, values: Dict, config_filename):
     settings['plot_before_difference'] = 'True' if values['plot_before_difference'] else 'False'
     settings['plot_difference_file'] = 'True' if values['plot_difference_file'] else 'False'
     settings['plot_output'] = 'True' if values['plot_output'] else 'False'
+    settings['plot_temperature'] = 'True' if values['plot_temperature'] else 'False'
+    settings['temperature_units'] = values['temperature_units']
     # settings['gpxpy_up_down'] = 'True' if values['gpxpy_up_down'] else 'False'
     settings['ceg'] = 'True' if values['ceg'] else 'False'
     settings['ceg_threshold'] = values['ceg_threshold']
@@ -230,6 +237,8 @@ def convert_settings_to_args(values: dict) -> argparse.Namespace:
     args.plot_before_difference = values['plot_before_difference']
     args.plot_difference_file = values['plot_difference_file']
     args.plot_output = values['plot_output']
+    args.plot_temperature = values['plot_temperature']
+    args.temperature_units = values['temperature_units']
     # args.gpxpy_up_down = values['gpxpy_up_down']
     args.ceg_threshold = float(values['ceg_threshold'])
     if not values['ceg']:
@@ -270,6 +279,8 @@ def gui():
     default_plot_before_difference: bool = settings.getboolean('plot_before_difference', fallback=False)
     default_plot_difference_file: bool = settings.getboolean('plot_difference_file', fallback=False)
     default_plot_output: bool = settings.getboolean('plot_output', fallback=False)
+    default_plot_temperature: bool = settings.getboolean('plot_temperature', fallback=False)
+    default_temperature_units: str = 'F'
     # default_gpxpy_up_down: bool = settings.getboolean('gpxpy_up_down', fallback=False)
     default_ceg: bool = settings.getboolean('ceg', fallback=False)
     default_ceg_threshold: str = str(GPXAnalyze.user_units_to_meters(settings.getfloat('ceg_threshold', fallback=2.0),
@@ -300,7 +311,8 @@ def gui():
                    'B Average over entire file except first 5 minutes',
                    'C Linear fit in 1 hour sections'
                ], default_value=default_calibration_method, key='calibration_method', readonly=True, size=(40, 1))],
-              [sg.Checkbox('Merge sensor temperature', key='merge_temperature', default=default_merge_temperature)],
+              [sg.Checkbox('Merge sensor temperature', key='merge_temperature', default=default_merge_temperature,
+                           enable_events=True)],
               [sg.Text('Elevation filter:', size=(10, 1)),
                sg.Combo(values=[
                    '0 None',
@@ -323,12 +335,18 @@ def gui():
               [sg.Checkbox('Show plot', default=default_show_plot, key='show_plot'),
                sg.Text('Plot file suffix.ext: '),
                sg.Input(size=(20, 1), default_text=default_plot_suffix, key='plot_suffix')],
-              [sg.Text('Plot: '),
+              [sg.Text('        '),
                sg.Checkbox('Input', default=default_plot_input, key='plot_input'),
                sg.Checkbox('Before difference', default=default_plot_before_difference,
                            key='plot_before_difference'),
                sg.Checkbox('Difference file', default=default_plot_difference_file, key='plot_difference_file'),
                sg.Checkbox('Output', default=default_plot_output, key='plot_output')],
+              [sg.Checkbox('Plot Temperature', default=default_plot_temperature, key='plot_temperature'),
+               sg.Text('Units:', key='temperature_units_label'),
+               sg.Combo(values=[
+                   'C',
+                   'F'
+               ], default_value=default_temperature_units, key='temperature_units', readonly=True, size=(2, 1))],
               # [sg.Checkbox('Calculate gpxpy.get_uphill_downhill()', default=default_gpxpy_up_down,
               #              key='gpxpy_up_down')],
               [sg.Checkbox('Calculate CEG/CEL. Threshold: ', default=default_ceg, key='ceg'),
@@ -348,6 +366,13 @@ def gui():
         if event == sg.WIN_CLOSED or event == 'Exit':
             save_config(config, values, config_filename)
             break
+
+        if event == 'merge_temperature':
+            window['plot_temperature'].Update(disabled = not values['merge_temperature'])
+            window['temperature_units'].Update(disabled = not values['merge_temperature'])
+            # Following statement doesn't work, PySimpleGUI doesn't seem to support disabling
+            # a simple text element.
+            # window['temperature_units_label'].Update(disabled=not values['merge_temperature'])
 
         if event == 'Process':
             window['output'].Update('')
@@ -407,6 +432,9 @@ def parse_command_line() -> argparse.Namespace:
                         help='Plot difference file elevation')
     parser.add_argument('--plot_output', default=False, action='store_true',
                         help='Plot output elevation (after filter and difference)')
+    parser.add_argument('--plot_temperature', default=False, action='store_true',
+                        help='Plot temperature (after merge)')
+    parser.add_argument('--temperature_units', default='F', help='Temperature units (F or C)')
     # parser.add_argument('--gpxpy_up_down', default=False, action='store_true',
     #                     help='Calculate gpxpy.get_uphill_downhill')
     parser.add_argument('--ceg_threshold', type=int, default=2,

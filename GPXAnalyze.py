@@ -398,6 +398,61 @@ def plot_elevations(input_gpx: gpxpy.gpx, input_filename: str, pre_difference_gp
                 plt.show(block=not is_interactive)
 
 
+def plot_temperature(output_gpx: gpxpy.gpx, args: argparse.Namespace, is_interactive: bool) -> None:
+    if not args.merge_temperature\
+            or not args.plot_temperature \
+            or output_gpx is None:
+        return
+
+    for track_idx in range(len(output_gpx.tracks)):
+        for segment_idx in range(len(output_gpx.tracks[track_idx].segments)):
+            # Create the data list. This is a long format data structure (in pandas sense of long vs wide).
+            data = []
+            for point in output_gpx.tracks[track_idx].segments[segment_idx].points:
+                for ext in point.extensions:
+                    for ext_child in ext:
+                        if ext_child.tag[-5:] == 'atemp':
+                            try:
+                                temperature = float(ext_child.text)
+                                if args.temperature_units == 'F':
+                                    temperature = temperature * 9.0 / 5.0 + 32
+                            except:
+                                temperature = 0.0
+                            data.append([point.time.replace(tzinfo=timezone.utc), temperature, 'temperature'])
+
+            if len(data) == 0:
+                return
+
+            # Create the dataframe.
+            sensor_df = pandas.DataFrame(data, columns=['time', 'temperature', 'legend'])
+            # sensor_df.info(verbose=True)
+            # print(sensor_df)
+
+            # Convert to user units
+            # sensor_df['elevation'] *= meters_to_user_units_scale_factor(args.units)
+
+            # Plot the dataFrame.
+            fig, axes = plt.subplots()
+            sns.lineplot(data=sensor_df, x='time', y='temperature', hue='legend')
+
+            # Set the axis labels.
+            # Set the x axis to show HH:MM
+            plt.xlabel('Time (UTC)')
+            plt.ylabel(f'Temperature (\u00b0{args.temperature_units})')
+            plt.xticks(rotation=30)
+            time_format = mdates.DateFormatter('%H:%M')
+            axes.xaxis.set_major_formatter(time_format)
+
+            # Put the legend at the bottom of the chart, and make it horizontal.
+            plt.legend(ncol=5, loc="lower center", bbox_to_anchor=(0.5, -0.3))
+
+            # tight_layout rearranges everything so it fits
+            plt.tight_layout()
+
+            # Show the plot
+            plt.show(block=not is_interactive)
+
+
 def print_stats(gpx: gpxpy.gpx, args: argparse.Namespace, is_interactive: bool) -> None:
     for track in gpx.tracks:
         print(f'Track: {track.name}')
