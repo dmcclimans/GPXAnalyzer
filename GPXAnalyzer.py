@@ -11,12 +11,12 @@ import sys
 # noinspection PyPep8Naming
 import PySimpleGUI as sg
 
-version_string = 'Version 1.0'
+version_string = 'Version 1.0.1'
 splash_window = None
 if len(sys.argv) <= 1:
     # PySimpleGUI (and tkinter) only supports  png and gif.
     splash_layout = [
-                [sg.Image('splashscreen.png')],
+                [sg.Image('AppSplashscreen.png')],
                 [sg.Text('GPXAnalyzer', size=(75, 1)), sg.Text(version_string)]
                 ]
     splash_window = sg.Window('GPXAnalyzer', splash_layout, no_titlebar=True, keep_on_top=True)
@@ -313,7 +313,6 @@ def gui():
     default_plot_ceg: bool = settings.getboolean('plot_ceg', fallback=False)
 
     sg.theme('Default1')
-
     layout = [[sg.Text('Input:'),
                sg.Input(size=(85, 1), key='files', default_text=default_files),
                sg.FilesBrowse()],
@@ -382,9 +381,9 @@ def gui():
                sg.Checkbox('Plot', default=default_plot_ceg, key='plot_ceg')],
               [sg.Button('Process')],
               [sg.Output(size=(100, 30), key='output')],
-              [sg.Button('Exit')]]
+              [sg.Button('Exit'), sg.Text(version_string, justification='right', size=(83, 1))]]
 
-    window_title = 'GPX Analyzer (' + version_string + ')'
+    window_title = 'GPX Analyzer'
     window = sg.Window(window_title, layout)
 
     while True:  # Event Loop
@@ -417,8 +416,8 @@ def parse_command_line() -> argparse.Namespace:
                         default='metric', help='Specify units')
     parser.add_argument('--sensor_file', default='',
                         help='Substitute elevations from Tempo disc file')
-    parser.add_argument('--adjust_sensor_time', default='0:00:00:00',
-                        help='Adjust sensor times (days:hh:mm:ss)')
+    parser.add_argument('--adjust_sensor_time', default='0 D 00:00:00',
+                        help='Adjust sensor times (dd D hh:mm:ss)')
     parser.add_argument('--merge_temperature', default=False, action='store_true',
                         help='Merge temperature from sensor file into gpx file')
     parser.add_argument('--merge_pressure', default=False, action='store_true',
@@ -472,7 +471,10 @@ def parse_command_line() -> argparse.Namespace:
                         help='Calculate CEG/CEL for all values up to threshold')
     parser.add_argument('--plot_ceg', default=False, action='store_true',
                         help='Plot all CEG values up to threshold')
+    parser.add_argument('--print_debugging', default=False, action='store_true',
+                        help='Print debugging and timing information to the output window')
     parser.add_argument('files', help='', nargs='*')
+
     args = parser.parse_args()
     return args
 
@@ -480,6 +482,10 @@ def parse_command_line() -> argparse.Namespace:
 def main():
     """Parse command line parameters or display GUI to get parameters"""
     args = parse_command_line()
+
+    # Check for print_debugging
+    if args.print_debugging:
+        GPXAnalyze.print_debugging = True
 
     if splash_window is not None:
         splash_window.close()

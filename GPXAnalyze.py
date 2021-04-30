@@ -19,6 +19,12 @@ import pytz
 import tzlocal
 
 
+# Global variable controls whether some timing information is "printed" to the console or output
+# window. This variable can be changed with the --print_debugging command line option.
+# You can also temporarily override it if necessary when testing.
+print_debugging: bool = False
+
+
 def meters_to_user_units_string(meters: float, units: str) -> str:
     """Convert a meters value to user units, and format as a string"""
     if units == 'english':
@@ -290,7 +296,7 @@ def get_timezone(args: argparse.Namespace) -> pytz.BaseTzInfo:
             return tzlocal.get_localzone()
         else:
             return pytz.timezone(timezone_name)
-    except Exception:
+    except BaseException:
         print(f'Invalid timezone name: {timezone_name}')
         return pytz.timezone('utc')
 
@@ -582,7 +588,8 @@ def subtract_difference(gpx: gpxpy.gpx, difference_gpx: gpxpy.gpx, difference_fi
                                     segment.points[i].elevation -= interpolated_difference
 
     end = time.time()
-    # print(f'subtract_difference elapsed time {end - start}')
+    if print_debugging:
+        print(f'subtract_difference elapsed time {end - start}')
 
 
 def read_csv_sensor_file(csv_filename: str, is_interactive: bool) -> Optional[pandas.DataFrame]:
@@ -603,28 +610,29 @@ def read_csv_sensor_file(csv_filename: str, is_interactive: bool) -> Optional[pa
         return None
 
     try:
-        sensor_dfheading = pandas.read_csv(csv_filename, nrows=2)
+        sensor_df_heading = pandas.read_csv(csv_filename, nrows=2)
         sensor_df = pandas.read_csv(csv_filename, skiprows=2, parse_dates=['date'])
     except (IOError, ValueError, Exception) as exc:
         print(f'Cannot read sensor file:\n    {csv_filename}\nError: {str(exc)}')
         return None
 
-    if sensor_df is None or sensor_df.empty or sensor_dfheading is None or sensor_dfheading.empty:
+    if sensor_df is None or sensor_df.empty or sensor_df_heading is None or sensor_df_heading.empty:
         return None
 
-    # sensor_dfheading contains the first two lines of the file. This is a heading line plus one data line.
+    # sensor_df_heading contains the first two lines of the file. This is a heading line plus one data line.
     # We use it to determine if the file contains temperatures in Fahrenheit or Celsius
     # If Fahrenheit, then all temps are converted to Celsius
-    if ('Temp_Units' in sensor_dfheading.columns) and (sensor_dfheading['Temp_Units'][0] == "Fahrenheit"):
+    if ('Temp_Units' in sensor_df_heading.columns) and (sensor_df_heading['Temp_Units'][0] == "Fahrenheit"):
         sensor_df['temperature'] = (sensor_df['temperature'] - 32.0) * 5.0 / 9.0
 
     # Parse the datetime field. Use exact=False to ignore the "(Mountain Standard Time)" text at the end.
-    # The format string (strptime) does not allow you to skip characters.
+    # The format string (which is in strptime format) does not allow you to skip characters.
     sensor_df['date'] = \
         pandas.to_datetime(sensor_df['date'], format='%a %b %d %Y %H:%M:%S GMT%z', exact=False)
 
     # Debugging code to show pressure plot.
-    if False:  # set True to show pressure plot (for debugging)
+    if print_debugging:
+        # Show pressure plot (for debugging)
         sensor_df.info(verbose=True)
         print(sensor_df)
         print(type(sensor_df['date'][0]))
@@ -760,7 +768,8 @@ def get_point_data(gpx_timestamps: np.ndarray, gpx_elevations: np.ndarray,
             new_idx += 1
 
     end = time.time()
-    # print(f'get_point_data elapsed time {end - start}')
+    if print_debugging:
+        print(f'get_point_data elapsed time {end - start}')
 
     # If any timestamps were outside the barometer timestamps, warn the user
     if new_idx < len(gpx_timestamps):

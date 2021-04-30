@@ -1,13 +1,13 @@
-GPXInstaller License Information
-================================
+GPXAnalyzer License Information
+===============================
 
-2021-04-12
+2021-04-30
 
 GPXAnalyzer is licensed under the MIT license. You may use the GPXAnalyzer application in
 any way you like. You may copy, distribute and modify the GPXAnalyzer software provided you
 include the copyright notice and license in all copies of the software.
 
-GPXAnalyzer uses a variety of compoents that are licensed under the Apache License,
+GPXAnalyzer uses a variety of components that are licensed under the Apache License,
 BSD license, MIT license, and similar free-to-use licenses. If you modify the GPXAnalyzer
 source code you are responsible for meeting the license requirements of any components
 used.
