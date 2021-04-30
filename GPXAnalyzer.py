@@ -12,6 +12,7 @@ import sys
 import PySimpleGUI as sg
 
 version_string = 'Version 1.0'
+splash_window = None
 if len(sys.argv) <= 1:
     # PySimpleGUI (and tkinter) only supports  png and gif.
     splash_layout = [
@@ -36,6 +37,24 @@ import traceback
 import sys
 import copy
 import pandas
+import pytz
+
+# global variable that contains a list of all
+# This would be a static variable inside the function get_all_timezones() in other languages
+static_all_timezones = []
+
+
+def get_all_timezones() -> list[str]:
+    global static_all_timezones
+    if len(static_all_timezones) == 0:
+        static_all_timezones = pytz.common_timezones
+        try:
+            static_all_timezones.remove('UTC')
+            static_all_timezones.insert(0, 'UTC')
+        except ValueError:
+            pass
+        static_all_timezones.insert(0, 'Local')
+    return static_all_timezones
 
 
 def show_arguments(args: argparse.Namespace) -> None:
@@ -65,6 +84,8 @@ def show_arguments(args: argparse.Namespace) -> None:
             print(f'Save plot with filename suffix: {args.plot_suffix}')
         else:
             print('Do not automatically save plot')
+        if args.timezone != 'Local':
+            print(f'Plot timezone = {args.timezone}')
     else:
         print('No elevation plot')
     if args.plot_input:
@@ -113,7 +134,7 @@ def process_files(args: argparse.Namespace, is_interactive: bool):
     sensor_df: Optional[pandas.DataFrame] = \
         GPXAnalyze.read_csv_sensor_file(args.sensor_file, is_interactive)
     if sensor_df is not None:
-        GPXAnalyze.adjust_sensor_time(sensor_df, args.adjust_sensor_time)
+        GPXAnalyze.perform_adjust_sensor_time(sensor_df, args.adjust_sensor_time)
 
     for input_filename in filenames:
         if not (input_filename and input_filename.strip()):
@@ -198,6 +219,7 @@ def save_config(config, values: Dict, config_filename):
     settings['output_suffix'] = values['output_suffix']
     settings['show_plot'] = 'True' if values['show_plot'] else 'False'
     settings['plot_suffix'] = values['plot_suffix']
+    settings['timezone'] = values['timezone']
     settings['plot_input'] = 'True' if values['plot_input'] else 'False'
     settings['plot_before_difference'] = 'True' if values['plot_before_difference'] else 'False'
     settings['plot_difference_file'] = 'True' if values['plot_difference_file'] else 'False'
@@ -233,6 +255,7 @@ def convert_settings_to_args(values: dict) -> argparse.Namespace:
     args.difference_file = values['difference_file']
     args.show_plot = values['show_plot']
     args.plot_suffix = values['plot_suffix']
+    args.timezone = values['timezone']
     args.plot_input = values['plot_input']
     args.plot_before_difference = values['plot_before_difference']
     args.plot_difference_file = values['plot_difference_file']
@@ -275,6 +298,7 @@ def gui():
     default_output_suffix: str = settings.get('output_suffix')
     default_show_plot: bool = settings.getboolean('show_plot', fallback=False)
     default_plot_suffix: str = settings.get('plot_suffix')
+    default_timezone: str = settings.get('timezone', 'Local')
     default_plot_input: bool = settings.getboolean('plot_input', fallback=False)
     default_plot_before_difference: bool = settings.getboolean('plot_before_difference', fallback=False)
     default_plot_difference_file: bool = settings.getboolean('plot_difference_file', fallback=False)
@@ -334,7 +358,10 @@ def gui():
                sg.Input(size=(20, 1), default_text=default_output_suffix, key='output_suffix')],
               [sg.Checkbox('Show plot', default=default_show_plot, key='show_plot'),
                sg.Text('Plot file suffix.ext: '),
-               sg.Input(size=(20, 1), default_text=default_plot_suffix, key='plot_suffix')],
+               sg.Input(size=(20, 1), default_text=default_plot_suffix, key='plot_suffix'),
+               sg.Text('Time zone: '),
+               sg.Combo(values=get_all_timezones(), default_value=default_timezone, key='timezone', readonly=True,
+                        size=(20, 1))],
               [sg.Text('        '),
                sg.Checkbox('Input', default=default_plot_input, key='plot_input'),
                sg.Checkbox('Before difference', default=default_plot_before_difference,
@@ -368,8 +395,8 @@ def gui():
             break
 
         if event == 'merge_temperature':
-            window['plot_temperature'].Update(disabled = not values['merge_temperature'])
-            window['temperature_units'].Update(disabled = not values['merge_temperature'])
+            window['plot_temperature'].Update(disabled=not values['merge_temperature'])
+            window['temperature_units'].Update(disabled=not values['merge_temperature'])
             # Following statement doesn't work, PySimpleGUI doesn't seem to support disabling
             # a simple text element.
             # window['temperature_units_label'].Update(disabled=not values['merge_temperature'])
@@ -424,6 +451,8 @@ def parse_command_line() -> argparse.Namespace:
     parser.add_argument('--plot_suffix', default='',
                         help='Suffix with extension to add to end of filename to write plot file. '
                              'If not specified, no plot file')
+    parser.add_argument('--timezone', choices=get_all_timezones(), metavar='TIMEZONE', default='Local',
+                        help='Timezone to use when plotting data')
     parser.add_argument('--plot_input', default=False, action='store_true',
                         help='Plot input elevation')
     parser.add_argument('--plot_before_difference', default=False, action='store_true',

@@ -9,12 +9,15 @@ import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 import math
 import argparse
 import numpy as np
 import time
 from lxml import etree
+import pytz
+import tzlocal
+
 
 def meters_to_user_units_string(meters: float, units: str) -> str:
     """Convert a meters value to user units, and format as a string"""
@@ -280,6 +283,18 @@ def segment_to_time_segment_legend_list(segment: gpxpy.gpx.GPXTrackSegment, lege
     return data
 
 
+def get_timezone(args: argparse.Namespace) -> pytz.BaseTzInfo:
+    timezone_name = args.timezone
+    try:
+        if timezone_name == 'Local':
+            return tzlocal.get_localzone()
+        else:
+            return pytz.timezone(timezone_name)
+    except Exception:
+        print(f'Invalid timezone name: {timezone_name}')
+        return pytz.timezone('utc')
+
+
 def plot_elevations(input_gpx: gpxpy.gpx, input_filename: str, pre_difference_gpx: gpxpy.gpx,
                     difference_gpx: gpxpy.gpx, output_gpx: gpxpy.gpx,
                     args: argparse.Namespace, is_interactive: bool) -> None:
@@ -371,10 +386,10 @@ def plot_elevations(input_gpx: gpxpy.gpx, input_filename: str, pre_difference_gp
 
             # Set the axis labels.
             # Set the x axis to show HH:MM
-            plt.xlabel('Time (UTC)')
+            plt.xlabel('Time')
             plt.ylabel(f'Elevation ({"feet" if args.units == "english" else "meters"})')
             plt.xticks(rotation=30)
-            time_format = mdates.DateFormatter('%H:%M')
+            time_format = mdates.DateFormatter('%H:%M', tz=get_timezone(args))
             axes.xaxis.set_major_formatter(time_format)
 
             # Put the legend at the bottom of the chart, and make it horizontal.
@@ -399,7 +414,7 @@ def plot_elevations(input_gpx: gpxpy.gpx, input_filename: str, pre_difference_gp
 
 
 def plot_temperature(output_gpx: gpxpy.gpx, args: argparse.Namespace, is_interactive: bool) -> None:
-    if not args.merge_temperature\
+    if not args.merge_temperature \
             or not args.plot_temperature \
             or output_gpx is None:
         return
@@ -416,7 +431,7 @@ def plot_temperature(output_gpx: gpxpy.gpx, args: argparse.Namespace, is_interac
                                 temperature = float(ext_child.text)
                                 if args.temperature_units == 'F':
                                     temperature = temperature * 9.0 / 5.0 + 32
-                            except:
+                            except (ValueError, OverflowError):
                                 temperature = 0.0
                             data.append([point.time.replace(tzinfo=timezone.utc), temperature, 'temperature'])
 
@@ -425,11 +440,6 @@ def plot_temperature(output_gpx: gpxpy.gpx, args: argparse.Namespace, is_interac
 
             # Create the dataframe.
             sensor_df = pandas.DataFrame(data, columns=['time', 'temperature', 'legend'])
-            # sensor_df.info(verbose=True)
-            # print(sensor_df)
-
-            # Convert to user units
-            # sensor_df['elevation'] *= meters_to_user_units_scale_factor(args.units)
 
             # Plot the dataFrame.
             fig, axes = plt.subplots()
@@ -437,10 +447,10 @@ def plot_temperature(output_gpx: gpxpy.gpx, args: argparse.Namespace, is_interac
 
             # Set the axis labels.
             # Set the x axis to show HH:MM
-            plt.xlabel('Time (UTC)')
+            plt.xlabel('Time')
             plt.ylabel(f'Temperature (\u00b0{args.temperature_units})')
             plt.xticks(rotation=30)
-            time_format = mdates.DateFormatter('%H:%M')
+            time_format = mdates.DateFormatter('%H:%M', tz=get_timezone(args))
             axes.xaxis.set_major_formatter(time_format)
 
             # Put the legend at the bottom of the chart, and make it horizontal.
@@ -512,7 +522,7 @@ def print_stats(gpx: gpxpy.gpx, args: argparse.Namespace, is_interactive: bool) 
                 max_elevation = 0.0
             print(f'  Min: {meters_to_user_units_string(min_elevation, args.units)}'
                   f'  Max: {meters_to_user_units_string(max_elevation, args.units)}'
-                  f'  Max-Min: {meters_to_user_units_string(max_elevation-min_elevation, args.units)}')
+                  f'  Max-Min: {meters_to_user_units_string(max_elevation - min_elevation, args.units)}')
 
 
 def subtract_difference(gpx: gpxpy.gpx, difference_gpx: gpxpy.gpx, difference_filename: str):
@@ -641,7 +651,7 @@ def pressure_to_elevation(pressure: float, p0: float) -> float:
     Returns: Elevation in meters
 
     """
-    return (1-((pressure/p0)**0.190284))*145366.45*0.3048
+    return (1 - ((pressure / p0) ** 0.190284)) * 145366.45 * 0.3048
 
 
 def gpx_pressures_to_elevations(elevations: np.ndarray, pressures: np.ndarray, p0: float):
@@ -671,14 +681,14 @@ def calculate_p0(pressure: float, elevation: float) -> float:
 
     Returns: The calibrated P0
     """
-    p0: float = pressure / ((1 - elevation / 0.3048 / 145366.45) ** (1/0.190284))
+    p0: float = pressure / ((1 - elevation / 0.3048 / 145366.45) ** (1 / 0.190284))
     return p0
 
 
 def get_point_data(gpx_timestamps: np.ndarray, gpx_elevations: np.ndarray,
                    sensor_timestamps: np.ndarray, sensor_pressures: np.ndarray,
                    sensor_temperatures: np.ndarray) \
-                   -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Create a list of pressures based on the pressure data.
     Args:
@@ -710,9 +720,9 @@ def get_point_data(gpx_timestamps: np.ndarray, gpx_elevations: np.ndarray,
     # DataFrames and series, but it's easy to do and does speed things up a little.
     sensor_len = len(sensor_timestamps)
     start_time = gpx_timestamps[0]
-    end_time = gpx_timestamps[len(gpx_timestamps)-1]
-    start_search = np.searchsorted(sensor_timestamps, start_time, side='left')-1
-    end_search = np.searchsorted(sensor_timestamps, end_time, side='right')+1
+    end_time = gpx_timestamps[len(gpx_timestamps) - 1]
+    start_search = np.searchsorted(sensor_timestamps, start_time, side='left') - 1
+    end_search = np.searchsorted(sensor_timestamps, end_time, side='right') + 1
     if start_search < 0:
         start_search = 0
     if end_search > sensor_len:
@@ -743,7 +753,7 @@ def get_point_data(gpx_timestamps: np.ndarray, gpx_elevations: np.ndarray,
                                     left=np.nan, right=np.nan)
             if np.isnan(temperature):
                 if new_idx > 0:
-                    temperature = gpx_temperatures[new_idx-1]
+                    temperature = gpx_temperatures[new_idx - 1]
                 else:
                     temperature = 0.0
             gpx_temperatures[new_idx] = temperature
@@ -754,12 +764,13 @@ def get_point_data(gpx_timestamps: np.ndarray, gpx_elevations: np.ndarray,
 
     # If any timestamps were outside the barometer timestamps, warn the user
     if new_idx < len(gpx_timestamps):
-        print(f'{100.0*new_idx/len(gpx_timestamps)}% of points in the segment were outside the barometer timestamps')
+        print(
+            f'{100.0 * new_idx / len(gpx_timestamps)}% of points in the segment were outside the barometer timestamps')
 
     # Return a slice (view) of the timestamps, elevations, and pressures.
     # This is usually the same size as the input arrays, but an be smaller if
     # the gpx_timestamp is outside the sensor_timestamps
-    return gpx_new_timestamps[:new_idx], gpx_new_elevations[:new_idx], gpx_pressures[:new_idx], \
+    return gpx_new_timestamps[:new_idx], gpx_new_elevations[:new_idx], gpx_pressures[:new_idx],\
            gpx_temperatures[:new_idx]
 
 
@@ -798,7 +809,7 @@ def add_constant_elevation(gpx_pressure_elevations: np.ndarray, gpx_pressures: n
 
     # Find the pressure and elevation at the midpoint. Adjust the elevation by the offset.
     # Calculate a new P0 based on the pressure and desired elevation at that point.
-    mid_idx: int = len(gpx_pressure_elevations)//2
+    mid_idx: int = len(gpx_pressure_elevations) // 2
     p0 = calculate_p0(gpx_pressures[mid_idx], gpx_pressure_elevations[mid_idx] + offset)
 
     # Recalculate the pressure_elevations using the new p0.
@@ -824,10 +835,10 @@ def find_closest_timestamp_idx(gpx_timestamps: np.ndarray, search_timestamp: flo
         return idx
     if idx >= len(gpx_timestamps):
         # search_timestamp is beyond end. Return last point
-        return len(gpx_timestamps)-1
+        return len(gpx_timestamps) - 1
     # Search_timestamp is between idx-1 and idx. Find the closest
-    if abs(gpx_timestamps[idx-1]-search_timestamp) < abs(gpx_timestamps[idx]-search_timestamp):
-        return idx-1
+    if abs(gpx_timestamps[idx - 1] - search_timestamp) < abs(gpx_timestamps[idx] - search_timestamp):
+        return idx - 1
     else:
         return idx
 
@@ -855,7 +866,7 @@ def calibrate_elevations2(gpx_timestamps: np.ndarray,
     """
     segment_count: int = len(gpx_timestamps)
     start_time: float = gpx_timestamps[0]
-    stop_time: float = gpx_timestamps[segment_count-1]
+    stop_time: float = gpx_timestamps[segment_count - 1]
     segment_time: float = stop_time - start_time
 
     # Description of the algorithm
@@ -904,23 +915,23 @@ def calibrate_elevations2(gpx_timestamps: np.ndarray,
     # Calculate the section end-points and mid-points
     section_endpoint_times: np.ndarray
     section_time: float
-    section_endpoint_times, section_time = np.linspace(start_time+skip_initial_interval, stop_time,
-                                                       num=(section_count+1), retstep=True)
-    section_endpoints: np.ndarray = np.zeros(section_count+1, dtype=int)
+    section_endpoint_times, section_time = np.linspace(start_time + skip_initial_interval, stop_time,
+                                                       num=(section_count + 1), retstep=True)
+    section_endpoints: np.ndarray = np.zeros(section_count + 1, dtype=int)
     section_midpoints: np.ndarray = np.zeros(section_count, dtype=int)
-    for i in range(section_count+1):
+    for i in range(section_count + 1):
         idx: int = find_closest_timestamp_idx(gpx_timestamps, section_endpoint_times[i])
         section_endpoints[i] = idx
         if i > 0:
             idx = find_closest_timestamp_idx(gpx_timestamps,
-                                             (section_endpoint_times[i]+section_endpoint_times[i-1]) / 2.0)
-            section_midpoints[i-1] = idx
+                                             (section_endpoint_times[i] + section_endpoint_times[i - 1]) / 2.0)
+            section_midpoints[i - 1] = idx
 
     # Calculate the average over each section. Then calculate the p0 required to adjust
     # the midpoint by this value.
     section_p0: np.ndarray = np.zeros(section_count)
     for i in range(section_count):
-        offset: float = np.average(elevation_differences[section_endpoints[i]:section_endpoints[i+1]])
+        offset: float = np.average(elevation_differences[section_endpoints[i]:section_endpoints[i + 1]])
         # offset is the offset to apply at the midpoint.
         p0: float = calculate_p0(gpx_pressures[section_midpoints[i]],
                                  gpx_pressure_elevations[section_midpoints[i]] + offset)
@@ -941,13 +952,14 @@ def calibrate_elevations2(gpx_timestamps: np.ndarray,
     for idx in range(segment_count):
         # Switch to next section if we are there.
         while (section_idx < section_count - 2) \
-                    and (idx > section_midpoints[section_idx+1]):
+                and (idx > section_midpoints[section_idx + 1]):
             section_idx += 1
 
-        p0: float = (section_p0[section_idx+1] - section_p0[section_idx]) \
-            * (gpx_timestamps[idx] - gpx_timestamps[section_endpoints[section_idx]]) \
-            / (gpx_timestamps[section_midpoints[section_idx+1]] - gpx_timestamps[section_endpoints[section_idx]]) \
-            + section_p0[section_idx]
+        p0: float = (section_p0[section_idx + 1] - section_p0[section_idx]) \
+                    * (gpx_timestamps[idx] - gpx_timestamps[section_endpoints[section_idx]]) \
+                    / (gpx_timestamps[section_midpoints[section_idx + 1]]
+                       - gpx_timestamps[section_endpoints[section_idx]]) \
+                    + section_p0[section_idx]
         gpx_pressure_elevations[idx] = round(pressure_to_elevation(gpx_pressures[idx], p0), 2)
 
     return
@@ -1004,7 +1016,7 @@ def calibrate_elevations(gpx_timestamps: np.ndarray, gpx_elevations: np.ndarray,
     elevation_differences: np.ndarray = np.subtract(gpx_elevations, gpx_pressure_elevations)
 
     start_time = gpx_timestamps[0]
-    stop_time = gpx_timestamps[length-1]
+    stop_time = gpx_timestamps[length - 1]
 
     # if the gpx file is 0 or 1 points long, do nothing
     if length < 2:
@@ -1022,7 +1034,7 @@ def calibrate_elevations(gpx_timestamps: np.ndarray, gpx_elevations: np.ndarray,
         # side='right' means a[i-1] <= search_time < a[i]
         start_idx = np.searchsorted(gpx_timestamps, stop_time - skip_initial_interval, side='right') - 1
         start_idx = max(start_idx, 0)
-        start_idx = min(start_idx, length-1)
+        start_idx = min(start_idx, length - 1)
         offset = np.average(elevation_differences[start_idx:])
         add_constant_elevation(gpx_pressure_elevations, gpx_pressures, offset)
 
@@ -1032,7 +1044,7 @@ def calibrate_elevations(gpx_timestamps: np.ndarray, gpx_elevations: np.ndarray,
     elif args.calibration_method[0].lower() == 'a':
         start_idx = np.searchsorted(gpx_timestamps, start_time + skip_initial_interval, side='right') - 1
         start_idx = max(start_idx, 0)
-        start_idx = min(start_idx, length-1)
+        start_idx = min(start_idx, length - 1)
         end_idx = np.searchsorted(gpx_timestamps, start_time + skip_initial_interval + beginning_average_interval,
                                   side='right')
         offset = np.average(elevation_differences[start_idx:end_idx])
@@ -1047,7 +1059,7 @@ def calibrate_elevations(gpx_timestamps: np.ndarray, gpx_elevations: np.ndarray,
             or ((stop_time - start_time) <= (section_interval + skip_initial_interval)):
         start_idx = np.searchsorted(gpx_timestamps, start_time + skip_initial_interval, side='right') - 1
         start_idx = max(start_idx, 0)
-        start_idx = min(start_idx, length-1)
+        start_idx = min(start_idx, length - 1)
         offset = np.average(elevation_differences[start_idx:])
         add_constant_elevation(gpx_pressure_elevations, gpx_pressures, offset)
 
@@ -1132,7 +1144,7 @@ def convert_dataframe_to_arrays(sensor_df: pandas.DataFrame) -> Tuple[np.ndarray
             if sensor_temperature_series[i] is not None:
                 sensor_temperature_list.append(sensor_temperature_series[i])
             elif i > 0:
-                sensor_temperature_list.append(sensor_temperature_series[i-1])
+                sensor_temperature_list.append(sensor_temperature_series[i - 1])
             else:
                 sensor_temperature_list.append(0.0)
 
@@ -1216,12 +1228,14 @@ def replace_elevations_from_pressure(gpx: gpxpy.gpx, sensor_df: pandas.DataFrame
 
             # Look up the pressure and temperature for each point.
             # This may remove points if they are outside the barometer data.
-            # gpx_timestamps, gpx_elevations, gpx_pressures, and gpx_temperatures will all be the same size (which could be zero).
+            # gpx_timestamps, gpx_elevations, gpx_pressures, and gpx_temperatures will all be the same size
+            # (which could be zero).
             # gpx_timestamps and gpx_elevations could be smaller than before.
             gpx_timestamps, gpx_elevations, gpx_pressures, gpx_temperatures, = \
                 get_point_data(gpx_timestamps, gpx_elevations,
                                sensor_timestamps, sensor_pressures, sensor_temperatures)
 
+            gpx_pressure_elevations: np.ndarray = np.zeros(0)
             if args.merge_pressure:
                 # Calculate new (uncalibrated) elevations from the pressure data.
                 gpx_pressure_elevations: np.ndarray = np.zeros_like(gpx_pressures)
@@ -1243,7 +1257,9 @@ def replace_elevations_from_pressure(gpx: gpxpy.gpx, sensor_df: pandas.DataFrame
                 pressure_idx = 0
                 for idx, point in enumerate(segment.points):
                     if point.time.timestamp() >= gpx_timestamps[pressure_idx]:
-                        if args.merge_pressure and pressure_idx < len(gpx_pressure_elevations):
+                        if args.merge_pressure \
+                                and gpx_pressure_elevations is not None \
+                                and pressure_idx < len(gpx_pressure_elevations):
                             point.elevation = gpx_pressure_elevations[pressure_idx]
                         if args.merge_temperature \
                                 and gpx_temperatures is not None \
@@ -1258,27 +1274,20 @@ def time_str_to_datetime(adjust_sensor_time: str, display_error: bool) -> pandas
     except (ValueError, Exception) as exc:
         if display_error:
             print(f'Cannot parse adjust sensor time: "{adjust_sensor_time}"\n  Error: {str(exc)}')
-        return timedelta(0)
+        return pandas.Timedelta(0)
     if delta is None:
         if display_error:
             print(f'Cannot parse adjust sensor time: "{adjust_sensor_time}"')
         return pandas.Timedelta(0)
     return delta
 
-def adjust_sensor_time(sensor_df : Optional[pandas.DataFrame], adjust_sensor_time: Optional[str]) -> None:
-    td : timedelta = time_str_to_datetime('2:03:04', True)
-    td = time_str_to_datetime('1 00:00:00', True)
-    td = time_str_to_datetime('-3:04:05', True)
-    td = time_str_to_datetime('0:0:01.2', True)
-    td = time_str_to_datetime('2d04:13:02.266', True)
 
+def perform_adjust_sensor_time(sensor_df: Optional[pandas.DataFrame], adjust_sensor_time: Optional[str]) -> None:
     if not adjust_sensor_time or not adjust_sensor_time.strip():
         return
 
-    delta : pandas.Timedelta = time_str_to_datetime(adjust_sensor_time, False)
+    delta: pandas.Timedelta = time_str_to_datetime(adjust_sensor_time, False)
     if delta.total_seconds() == 0:
         return
 
     sensor_df['date'] += delta
-
-
