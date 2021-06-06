@@ -1,7 +1,7 @@
 [GPXAnalyzer](https://github.com/dmcclimans/GPXAnalyzer)
 ==========
 
-Version 1.0.1  (2021-04-30)
+Version 1.0.2  (2021-06-06)
 
 GPXAnalyzer is a program to analyze and modify GPX files recorded by a smartphone or
 dedicated GPS device. It can calculate the Cumulative Elevation Gain (CEG) or Loss (CEL),

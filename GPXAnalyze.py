@@ -207,6 +207,8 @@ def write_gpx_file(gpx: gpxpy.gpx, input_filename: str, suffix: str) -> None:
 
     # Add the suffix to each track name
     for track in gpx.tracks:
+        if track.name is None or len(track.name) == 0:
+            track.name = os.path.splitext(os.path.basename(input_filename))[0]
         track.name += suffix
 
     # Add the suffix to the filename.
@@ -774,13 +776,14 @@ def get_point_data(gpx_timestamps: np.ndarray, gpx_elevations: np.ndarray,
     # If any timestamps were outside the barometer timestamps, warn the user
     if new_idx < len(gpx_timestamps):
         print(
-            f'{100.0 * new_idx / len(gpx_timestamps)}% of points in the segment were outside the barometer timestamps')
+            f'{100.0 * (len(gpx_timestamps)-new_idx) / len(gpx_timestamps)}% of points in the segment' 
+             ' were outside the barometer timestamps')
 
     # Return a slice (view) of the timestamps, elevations, and pressures.
     # This is usually the same size as the input arrays, but an be smaller if
     # the gpx_timestamp is outside the sensor_timestamps
     return gpx_new_timestamps[:new_idx], gpx_new_elevations[:new_idx], gpx_pressures[:new_idx],\
-           gpx_temperatures[:new_idx]
+        gpx_temperatures[:new_idx]
 
 
 # Define constants the control calibration.
@@ -1243,6 +1246,9 @@ def replace_elevations_from_pressure(gpx: gpxpy.gpx, sensor_df: pandas.DataFrame
             gpx_timestamps, gpx_elevations, gpx_pressures, gpx_temperatures, = \
                 get_point_data(gpx_timestamps, gpx_elevations,
                                sensor_timestamps, sensor_pressures, sensor_temperatures)
+
+            if len(gpx_timestamps) < 2:
+                return
 
             gpx_pressure_elevations: np.ndarray = np.zeros(0)
             if args.merge_pressure:

@@ -11,7 +11,7 @@ import sys
 # noinspection PyPep8Naming
 import PySimpleGUI as sg
 
-version_string = 'Version 1.0.1'
+version_string = 'Version 1.0.2'
 splash_window = None
 if len(sys.argv) <= 1:
     # PySimpleGUI (and tkinter) only supports  png and gif.
